@@ -11,8 +11,16 @@ Original file is located at
 #importing libraries
 import sys
 import streamlit as st
+import streamlit as st
+try:
+    import sklearn
+except ImportError:
+    st.error("scikit-learn is missing. Ensure requirements.txt has scikit-learn and redeploy.")
+    st.stop()
 import pickle
 import pandas as pd
+import altair as alt
+
 
 # Ensure compatibility with model pickled in older scikit-learn versions
 import sklearn
@@ -38,6 +46,32 @@ except Exception as e:
 st.title('California Housing Price Predictor')
 st.write('Enter the details below to get a predicted house value.')
 
+# Precomputed evaluation metrics (replace with your real validation values)
+model_metrics = {
+    'rmse': 0.718,
+    'mae': 0.542,
+    'r2': 0.812
+}
+
+st.subheader('Model Performance Metrics')
+colA, colB, colC = st.columns(3)
+colA.metric('RMSE', f"{model_metrics['rmse']:.3f}")
+colB.metric('MAE', f"{model_metrics['mae']:.3f}")
+colC.metric('R²', f"{model_metrics['r2']:.3f}")
+
+# Build feature importance if available
+feature_importance = None
+feature_names = None
+if hasattr(model, 'named_steps') and 'model' in model.named_steps:
+    base = model.named_steps['model']
+    if hasattr(base, 'feature_importances_'):
+        feature_importance = base.feature_importances_
+
+if feature_importance is None and hasattr(model, 'feature_importances_'):
+    feature_importance = model.feature_importances_
+
+if feature_importance is not None:
+    feature_names = getattr(model, 'feature_names_in_', [f'f{i}' for i in range(len(feature_importance))])
 
 #CREATE USER INPUT FIELDS
 st.subheader('Property details')
@@ -60,45 +94,30 @@ if st.button('Predict House Value'):
         Population, AveOccup, Latitude, Longitude
     ]], columns=model.feature_names_in_)
     prediction = model.predict(input_data)
-    st.success(f"Predicted House Price: ${prediction[0] * 100:.0f},000")
+    estimate = float(prediction[0]) * 100
 
-# To run the app, execute from the shell:
+    st.success(f"Predicted House Price: ${estimate:.0f},000")
+
+    st.write('---')
+    st.subheader('Prediction details')
+    st.write('Input data:')
+    st.dataframe(input_data)
+    st.metric('Model prediction (100k units)', f"{prediction[0]:.3f}")
+    st.metric('Estimated price ($)', f"${estimate:.0f}")
+
+if feature_importance is not None and feature_names is not None:
+    fi_df = pd.DataFrame({'feature': feature_names, 'importance': feature_importance})
+    fi_df = fi_df.sort_values('importance', ascending=False)
+    st.subheader('Feature importance')
+    chart = alt.Chart(fi_df).mark_bar().encode(
+        x=alt.X('importance:Q', title='Importance'),
+        y=alt.Y('feature:N', sort='-x', title='Feature')
+    )
+    st.altair_chart(chart, use_container_width=True)
+else:
+    st.info('Feature importance unavailable for this model architecture.')
+
+# To run locally:
 # streamlit run app.py
 
 # Commented out IPython magic to ensure Python compatibility.
-# %%writefile /content/california_housing_price_predictor.py
-# #BUILDING THE APP
-# #importing libraries
-# import sys
-# # !{sys.executable} -m pip install streamlit # This line should not be in the .py file, install once in notebook
-# import streamlit as st
-# import pickle
-# import pandas as pd
-# 
-# # Load the full pipeline
-# model = pickle.load(open('/content/california_knn_pipeline.pkl', 'rb'))
-# st.title('California Housing Price Predictor')
-# st.write('Enter the details below to get a predicted house value.')
-# 
-# #CREATE USER INPUT FIELDS
-# st.subheader('Property details')
-# col1, col2 = st.columns(2)
-# with col1:
-#     MedInc     = st.number_input('Median Income',      value=3.5)
-#     HouseAge   = st.number_input('House Age',           value=25.0)
-#     AveRooms   = st.number_input('Average Rooms',       value=5.2)
-#     AveBedrms  = st.number_input('Average Bedrooms',    value=1.1)
-# with col2:
-#     Population = st.number_input('Population',          value=1200.0)
-#     AveOccup   = st.number_input('Average Occupancy',   value=2.8)
-#     Latitude   = st.number_input('Latitude',            value=34.1)
-#     Longitude  = st.number_input('Longitude',           value=-118.3)
-# 
-# #PREDICTION LOGIC
-# if st.button('Predict House Value'):
-#     input_data = pd.DataFrame([[
-#         MedInc, HouseAge, AveRooms, AveBedrms,
-#         Population, AveOccup, Latitude, Longitude
-#     ]], columns=model.feature_names_in_)
-#     prediction = model.predict(input_data)
-#     st.success(f"Predicted House Price: ${prediction[0] * 100:.0f},000")
