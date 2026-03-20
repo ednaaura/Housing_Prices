@@ -10,15 +10,34 @@ Original file is located at
 #BUILDING THE APP
 #importing libraries
 import sys
-!{sys.executable} -m pip install streamlit
 import streamlit as st
 import pickle
 import pandas as pd
 
+# Ensure compatibility with model pickled in older scikit-learn versions
+import sklearn
+from sklearn.compose import _column_transformer as _ct
+
+if not hasattr(_ct, '_RemainderColsList'):
+    # sklearn 1.8 removed _RemainderColsList; add a lightweight compatibility alias
+    class _RemainderColsList(list):
+        """Compatibility stub for pickled ColumnTransformer state from older sklearn."""
+        pass
+
+    _ct._RemainderColsList = _RemainderColsList
+
 # Load the full pipeline
-model = pickle.load(open('/content/california_knn_pipeline.pkl', 'rb'))
+try:
+    model = pickle.load(open("california_knn_pipeline.pkl", "rb"))
+except Exception as e:
+    st.error(
+        "Failed to load model pipeline. Ensure scikit-learn is pinned to 1.6.1 or the model is re-saved with your version."
+    )
+    raise
+
 st.title('California Housing Price Predictor')
 st.write('Enter the details below to get a predicted house value.')
+
 
 #CREATE USER INPUT FIELDS
 st.subheader('Property details')
@@ -43,7 +62,8 @@ if st.button('Predict House Value'):
     prediction = model.predict(input_data)
     st.success(f"Predicted House Price: ${prediction[0] * 100:.0f},000")
 
-get_ipython().system('streamlit run /content/california_housing_price_predictor.py')
+# To run the app, execute from the shell:
+# streamlit run app.py
 
 # Commented out IPython magic to ensure Python compatibility.
 # %%writefile /content/california_housing_price_predictor.py
